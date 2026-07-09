@@ -8,8 +8,8 @@
 <h1>Google Calendar OAuth2 Demo</h1>
 <p>Bấm nút dưới để ủy quyền cho app truy cập Google Calendar của bạn.</p>
 
-<!-- Link toi endpoint khoi dong flow OAuth2 -->
-<a href="/oauth2/authorize">
+<!-- Truy cập /connected: nếu chưa ủy quyền, Spring tự redirect sang Google consent -->
+<a href="/connected">
     <button>Connect Google Calendar</button>
 </a>
 </body>

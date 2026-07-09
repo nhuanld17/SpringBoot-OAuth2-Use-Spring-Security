@@ -3,20 +3,17 @@
 <head><meta charset="UTF-8"><title>Connected</title></head>
 <body>
 <h1>✅ Đã kết nối Google Calendar!</h1>
-<p>Backend vừa đổi <code>code</code> lấy token thành công.
+<p>Spring Security đã tự đổi <code>code</code> lấy token và lưu authorized client.
     Thông tin token:</p>
 <ul>
-    <li>Có access token: <b
-            th:text="${hasAccessToken}"></b></li>
-    <li>Có refresh token: <b
-            th:text="${hasRefreshToken}"></b></li>
-    <li>Access token hết hạn sau (giây): <b
-            th:text="${expiresIn}"></b></li>
+    <li>Có access token: <b th:text="${hasAccessToken}"></b></li>
+    <li>Có refresh token: <b th:text="${hasRefreshToken}"></b></li>
+    <li>Access token hết hạn lúc: <b th:text="${expiresAt}"></b></li>
     <li>Token type: <b th:text="${tokenType}"></b></li>
-    <li>Scope được cấp: <b th:text="${scope}"></b></li>
+    <li>Scope được cấp: <b th:text="${scopes}"></b></li>
 </ul>
+<p>Access token hết hạn sẽ được Spring <b>tự động refresh</b> (nhờ refresh token) ở request kế tiếp.</p>
 <p><a href="/calendars"><button>Xem lịch của tôi →</button></a></p>
 <a href="/">← Về trang chủ</a>
 </body>
 </html>
-
