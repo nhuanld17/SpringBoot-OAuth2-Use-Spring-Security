@@ -1,0 +1,1260 @@
+# OAuth2 Framework Overview - Tại Sao Cần OAuth2?
+
+
+---
+
+## 📋 CHECKLIST - Nội dung bài học
+
+✅ **Vấn đề OAuth2 giải quyết** - Hiểu tại sao không nên chia sẻ password với ứng dụng bên thứ 3  
+✅ **Delegated Authorization** - Cơ chế ủy quyền thay mặt người dùng  
+✅ **Limited Access Scope** - Giới hạn phạm vi truy cập  
+✅ **Revocable Access** - Thu hồi quyền truy cập bất cứ lúc nào  
+✅ **OAuth2 KHÔNG PHẢI là gì** - Phân biệt với Authentication  
+✅ **OAuth2 LÀ gì** - Authorization framework thực sự
+
+---
+
+## 🎯 Mục Tiêu Học Tập
+
+Sau bài học này, bạn sẽ:
+- Hiểu rõ **4 vấn đề lớn** mà OAuth2 giải quyết
+- Phân biệt được OAuth2 vs Authentication vs API Security
+- Nắm vững khái niệm **Delegated Authorization**
+- Hiểu cơ chế **Token-based Access Control**
+- Áp dụng được vào dự án Spring Security backend
+
+---
+
+## 1. Những Vấn Đề OAuth2 Được Sinh Ra Để Giải Quyết
+
+OAuth2 không phải là một công nghệ “thêm cho vui”.  
+Nó ra đời vì **mô hình bảo mật cũ đã không còn phù hợp** với hệ sinh thái ứng dụng hiện đại (web, mobile, third-party app, microservice).
+
+Cốt lõi, OAuth2 giải quyết **4 vấn đề lớn sau**.
+### 1.1. Không Chia Sẻ Credentials Cho Ứng Dụng Bên Thứ Ba
+
+**[CORE PROBLEM] – Vấn đề nghiêm trọng nhất**
+#### ❌ Mô hình truyền thống (sai từ tư duy):
+
+Trong mô hình cũ, nếu một ứng dụng muốn truy cập dữ liệu của người dùng, cách duy nhất là:
+
+> **đăng nhập như chính người dùng đó**
+
+```
+Kịch bản cũ (KHÔNG AN TOÀN):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Người dùng: "Tôi muốn in ảnh từ Google Photos"
+App in ảnh: "Cho tôi username/password Google"
+Người dùng: "Đây: user123 / mypassword"
+App in ảnh: "OK, tôi đăng nhập thay bạn"
+```
+
+📌 **Vấn đề nằm ở đây**:  
+App bên thứ ba **nắm toàn quyền kiểm soát tài khoản**.
+
+```
+❌ RỦI RO:
+- App biết mật khẩu thật
+- App có toàn quyền như chủ tài khoản
+- App bị hack → mật khẩu bị lộ
+- Không thể thu hồi quyền truy cập riêng lẻ
+```
+
+👉 Đây là **anti-pattern bảo mật**, nhưng từng là cách duy nhất.
+#### ✅ OAuth2 thay đổi hoàn toàn cách tiếp cận
+
+OAuth2 đưa ra một nguyên tắc mới:
+
+> ❝ Ứng dụng KHÔNG cần đăng nhập như người dùng  
+> → chỉ cần được người dùng CHO PHÉP ❞
+
+```
+Kịch bản mới (AN TOÀN):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Người dùng: "Tôi muốn in ảnh từ Google Photos"
+App in ảnh: "Hãy cấp quyền cho tôi trên Google"
+→ Redirect sang Google
+Google: "App in ảnh muốn xem ảnh của bạn. Đồng ý?"
+Người dùng: "Đồng ý" (login trực tiếp với Google)
+Google → App: Access Token (xyz123)
+App: Dùng token để gọi Google Photos API
+```
+
+```
+✅ LỢI ÍCH:
+- App KHÔNG BAO GIỜ biết password
+- Token chỉ có quyền được cấp (ví dụ: read photos)
+- Có thể thu hồi token bất cứ lúc nào
+- Mật khẩu người dùng luôn được giữ kín
+```
+
+📌 **Access Token** ở đây chính là:
+
+> “Giấy phép tạm thời để truy cập tài nguyên, không phải thông tin đăng nhập”.
+
+#### 🏨 Ví dụ đời thường (chuẩn logic OAuth2):
+
+```
+Thuê khách sạn:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ Cách cũ: Đưa chìa khóa tổng
+   → Mở được mọi phòng
+   → Không kiểm soát được
+
+✅ OAuth2: Thẻ từ giới hạn
+   → Chỉ mở phòng 304
+   → Chỉ trong khung giờ cho phép
+   → Thu hồi thẻ là xong
+```
+
+---
+
+### 1.2. Delegated Authorization – Ủy Quyền Truy Cập Thay Mặt Người Dùng
+
+**[FOUNDATION] – Linh hồn của OAuth2**
+
+#### 📚 Khái niệm cốt lõi:
+
+OAuth2 cho phép một ứng dụng:
+
+> **truy cập tài nguyên THAY MẶT người dùng**,  
+> **nhưng không trở thành người dùng đó**.
+
+👉 App được **ủy quyền**, không phải **giả danh**.
+
+#### 🔄 Luồng hoạt động chuẩn OAuth2:
+
+```
+User (Resource Owner)
+        |
+        | 1. "Cho phép App X truy cập"
+        v
+Authorization Server
+        |
+        | 2. Xác thực user + xin consent
+        v
+Authorization Server
+        |
+        | 3. Cấp Access Token
+        v
+Client App
+        |
+        | 4. Gọi API kèm Access Token
+        v
+Resource Server
+```
+
+📌 Điểm mấu chốt:
+
+- User **chỉ đăng nhập tại Authorization Server**
+
+- Client **không bao giờ thấy credentials**
+
+- Resource Server **chỉ tin Access Token**
+
+#### 💻 Ví dụ backend (Java / Spring):
+
+```java
+// ❌ Không có OAuth2
+BankAPI.login(username, password);
+BankAPI.getTransactions();
+
+// ✅ Có OAuth2
+GET /transactions
+Authorization: Bearer <access_token>
+```
+
+Resource Server chỉ kiểm tra:
+
+- Token có hợp lệ không
+
+- Token có scope phù hợp không
+
+- Token thuộc user nào
+
+#### 🧩 Các vai trò trong OAuth2:
+
+|Vai trò|Ý nghĩa|
+|---|---|
+|Resource Owner|Người dùng|
+|Client|Ứng dụng bên thứ ba|
+|Authorization Server|Nơi xác thực & cấp token|
+|Resource Server|API chứa dữ liệu|
+
+👉 **Token = giấy ủy quyền**, không phải danh tính.
+
+---
+
+### 1.3. Giới Hạn Quyền Truy Cập (Scope)
+
+**[PRINCIPLE OF LEAST PRIVILEGE]**
+
+OAuth2 không chỉ cấp quyền, mà còn **giới hạn quyền một cách chi tiết**.
+
+> App chỉ được làm **đúng những gì user cho phép**.
+
+#### 📊 Ví dụ scope:
+
+|Scope|Quyền|
+|---|---|
+|`read:photos`|Chỉ đọc ảnh|
+|`write:posts`|Đăng bài|
+|`read:transactions`|Xem giao dịch|
+|`transfer:money`|Chuyển tiền|
+
+#### 🔄 Cách scope hoạt động:
+
+```
+App xin: scope=read:photos
+User đồng ý
+→ Token chỉ chứa read:photos
+
+GET /photos     ✅ OK
+DELETE /photos  ❌ FORBIDDEN
+```
+
+#### 🎫 Ví dụ dễ hình dung:
+
+```
+Thẻ ra vào công ty:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Intern     → Khu làm việc chung
+Developer  → Phòng server
+Admin      → Toàn bộ hệ thống
+```
+
+Scope chính là **ranh giới quyền lực**.
+
+---
+
+### 1.4. Thu Hồi Quyền Truy Cập (Revocable Access)
+
+**[CONTROL & SAFETY NET]**
+
+OAuth2 cho phép:
+
+> **Thu hồi quyền của một ứng dụng bất kỳ lúc nào**  
+> **mà không ảnh hưởng đến tài khoản chính**.
+
+#### 📊 So sánh:
+
+|Cách|Thu hồi|Hậu quả|
+|---|---|---|
+|Password|Đổi password|Tất cả app chết|
+|OAuth2|Xóa token|Chỉ app đó chết|
+
+#### 🎬 Tình huống thực tế:
+
+```
+Bạn cấp quyền Google Drive cho 3 app
+→ Phát hiện 1 app đáng ngờ
+→ Thu hồi token của app đó
+→ Các app khác không bị ảnh hưởng
+```
+
+📌 Đây là thứ **mô hình cũ không bao giờ làm được**.
+
+
+> **OAuth2 là một chuẩn ủy quyền (authorization), Nó cho phép ứng dụng bên thứ ba  
+được người dùng cho phép truy cập một phần tài nguyên của họ mà không cần biết username/password**
+
+---
+
+## 2. OAuth2 **KHÔNG PHẢI** Là Gì?
+
+Phần này cực kỳ quan trọng.  
+**90% hiểu sai OAuth2 là do bỏ qua mục này.**
+
+## 2.1. OAuth2 **KHÔNG PHẢI** Là Authentication Protocol
+
+_(OAuth2 không dùng để đăng nhập người dùng)_
+
+**[CONFIDENT]** – OAuth.net, Spring Security Reference
+
+```
+❌ SAI LẦM KINH ĐIỂN:
+"OAuth2 dùng để đăng nhập" ❌
+
+✅ SỰ THẬT:
+- OAuth2 = AUTHORIZATION (Ủy quyền)
+- OpenID Connect (OIDC) = AUTHENTICATION (Xác thực)
+```
+
+### 🔴 Khẳng định trước cho rõ khái niệm
+
+> **OAuth2 không được thiết kế để xác thực người dùng.**  
+> Nó **không định nghĩa user là ai**, **không định nghĩa login**,  
+> và **không đảm bảo token đại diện cho một danh tính cụ thể**.
+
+OAuth2 chỉ tập trung vào **một vấn đề duy nhất**:
+
+> 👉 **Cách một ứng dụng được cấp quyền truy cập tài nguyên.**
+
+---
+
+### OAuth2 thực sự trả lời câu hỏi nào?
+
+OAuth2 **KHÔNG trả lời**:
+
+> ❌ “User này là ai?”  
+> ❌ “User có email hay username gì?”  
+> ❌ “Token này có đại diện cho con người hay không?”
+
+OAuth2 **CHỈ trả lời**:
+
+> ✅ “Token này được phép làm gì?”  
+> ✅ “Token này có quyền (scope) gì?”  
+> ✅ “Token này có được phép truy cập resource hay không?”
+
+📌 **OAuth2 quan tâm đến TOKEN, không quan tâm USER.**
+
+---
+
+### 📊 So sánh bản chất (đọc kỹ, đừng đọc lướt)
+
+|Tiêu chí|OAuth2|OpenID Connect|
+|---|---|---|
+|Bản chất|Authorization|Authentication|
+|Trả lời câu hỏi|Token được phép làm gì?|User là ai?|
+|Đối tượng chính|Token|User|
+|Output|Access Token|ID Token (+ Access Token)|
+|Nhận diện user|❌ Không chuẩn hóa|✅ Chuẩn hóa|
+|Login|❌ Không đảm nhiệm|✅ Có|
+|Session / SSO|❌ Không|✅ Có|
+
+👉 **OpenID Connect = OAuth2 + lớp xác thực danh tính (Identity Layer)**
+
+---
+
+### 💻 Ví dụ rất dễ gây nhầm lẫn trong code
+
+```java
+// ❌ OAuth2 thuần túy
+public void oauthCallback(String accessToken) {
+    // Access Token hợp lệ
+    // Nhưng OAuth2 KHÔNG định nghĩa:
+    // ❓ User là ai?
+    // ❓ Email, username là gì?
+    // ❓ Token này có đại diện cho con người không?
+}
+```
+
+➡️ Với OAuth2 thuần, **không có chuẩn nào** đảm bảo các thông tin trên tồn tại.
+
+---
+
+```java
+// ✅ OpenID Connect
+public void oidcCallback(String idToken) {
+    // ID Token (JWT) chứa thông tin danh tính user
+    {
+        "sub": "user123",
+        "email": "john@example.com",
+        "name": "John Doe",
+        "iss": "https://accounts.google.com",
+        "aud": "client-id"
+    }
+}
+```
+
+➡️ **ID Token được chuẩn hóa để phục vụ xác thực và login.**
+
+---
+
+### 📌 Khi nào BẮT BUỘC phải dùng OpenID Connect?
+
+Nếu application của mày cần:
+
+- Đăng nhập người dùng (Login)
+
+- Quản lý session user
+
+- Single Sign-On (SSO)
+
+- Lấy thông tin user (email, profile, userId)
+
+
+👉 **BẮT BUỘC dùng OpenID Connect**,  
+👉 **KHÔNG dùng OAuth2 thuần túy cho login.**
+
+---
+
+### 🤯 Vì sao rất nhiều người hay nhầm OAuth2 với login?
+
+```java
+"Đăng nhập bằng Google"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Thứ người dùng thấy: LOGIN
+Thứ thực sự diễn ra:
+1️⃣ OpenID Connect xác thực danh tính user (Authentication)
+2️⃣ OAuth2 cấp quyền cho ứng dụng (Authorization)
+3️⃣ Ứng dụng nhận:
+   - ID Token (OIDC – dùng cho login)
+   - Access Token (OAuth2 – dùng gọi API)
+```
+
+👉 UI gọi là “login”  
+👉 Dev tưởng OAuth2 làm login  
+👉 **Sai ngay từ khái niệm gốc**
+
+
+### ✅ Kết luận (đóng đinh khái niệm)
+
+> ❌ OAuth2 **không phải** authentication protocol  
+> ❌ OAuth2 **không định danh user**  
+> ❌ OAuth2 **không dùng để login**
+
+> ✅ OAuth2 **chỉ dùng để ủy quyền truy cập tài nguyên**  
+> ✅ Login, session, SSO → **OpenID Connect**
+
+---
+
+### 2.2. OAuth2 **KHÔNG PHẢI** Là Giải Pháp Bảo Mật API Toàn Diện
+
+**[LIKELY]** – Spring Security in Action
+
+OAuth2 **chỉ tập trung vào một việc**:
+
+```
+✅ Ai được phép truy cập
+✅ Được phép làm gì
+```
+
+OAuth2 **KHÔNG hề giải quyết** các vấn đề sau:
+
+```
+❌ Rate limiting
+❌ Input validation
+❌ API versioning
+❌ Logging / monitoring
+❌ DDoS protection
+❌ Mã hóa dữ liệu lưu trữ
+```
+
+👉 Nếu nghĩ “có OAuth2 là API an toàn rồi” → **ảo tưởng**.
+
+#### 💻 Ví dụ rất thực tế:
+
+```java
+@GetMapping("/photos")
+@PreAuthorize("hasAuthority('SCOPE_read:photos')")
+public List<Photo> getPhotos() {
+    // OAuth2 đã xong ở đây
+
+    // Nhưng:
+    // ❌ Không chặn spam request
+    // ❌ Không validate input
+    // ❌ Không log
+    // ❌ Không đo metrics
+}
+```
+
+👉 Một hệ thống chuẩn phải là **tổ hợp**:
+
+|Thành phần|Giải quyết|
+|---|---|
+|OAuth2|Authorization|
+|OIDC|Authentication|
+|API Gateway|Rate limit, logging|
+|Bean Validation|Validate input|
+|TLS|Mã hóa truyền|
+|Monitoring|Quan sát hệ thống|
+
+---
+
+### 2.3. OAuth2 **KHÔNG THỂ** Thay Thế HTTPS (TLS)
+
+**[CONFIDENT]** – OAuth 2.0 Security Best Practices
+
+```
+❌ SAI NGUY HIỂM:
+Dùng OAuth2 trên HTTP
+```
+
+OAuth2 **KHÔNG mã hóa dữ liệu**.  
+Nó **PHỤ THUỘC HOÀN TOÀN** vào HTTPS.
+
+#### ⚠️ Nếu dùng HTTP thì chuyện gì xảy ra?
+
+```
+Client → Auth Server: gửi credentials
+Hacker 👀 đọc được
+
+Auth Server → Client: gửi Access Token
+Hacker 👀 cướp token
+
+Hacker → Resource Server: Bearer token
+→ Truy cập hợp lệ
+```
+
+👉 OAuth2 **không có cơ chế chống sniffing**.
+
+#### 💻 Cấu hình đúng (Spring):
+
+```java
+http
+  .requiresChannel()
+  .anyRequest().requiresSecure()
+  .and()
+  .oauth2ResourceServer()
+  .jwt();
+```
+
+📌 Redirect URI, Token endpoint, Authorization endpoint  
+👉 **BẮT BUỘC HTTPS**, không có ngoại lệ.
+
+---
+
+### 2.4. OAuth2 **KHÔNG** Đồng Nghĩa Với “Tin Cậy Ứng Dụng”
+
+(Phần này nhiều tài liệu không nói rõ)
+
+OAuth2 **KHÔNG nói rằng**:
+
+> “App này là app tốt”
+
+OAuth2 chỉ nói:
+
+> “User đã đồng ý cho app này quyền X”
+
+👉 App vẫn có thể:
+
+- Code ngu
+
+- Lưu token bừa bãi
+
+- Bị hack
+
+
+Vì vậy:
+
+```
+OAuth2 bảo vệ USER khỏi lộ mật khẩu
+KHÔNG bảo vệ USER khỏi app ngu
+```
+
+---
+
+### 2.5. Tóm Tắt Nhanh (Để Không Dùng Sai OAuth2)
+
+```
+OAuth2:
+✔ Authorization
+✔ Delegated access
+✔ Scope-based permission
+✔ Revocable access
+
+OAuth2 KHÔNG:
+✘ Login
+✘ Nhận diện user
+✘ Bảo mật toàn bộ API
+✘ Mã hóa dữ liệu
+✘ Thay thế HTTPS
+```
+
+---
+
+## 3. OAuth2 LÀ Gì?
+
+**[CONFIDENT]** - Nguồn: RFC 6749, OAuth.net
+
+### 3.1. Authorization Framework
+
+```
+Framework = Bộ khung, không phải thư viện cụ thể
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ OAuth2 định nghĩa:
+   - Các vai trò (roles): Client, Resource Owner, Authorization Server, Resource Server
+   - Các flow (grant types): Authorization Code, Implicit, Password, Client Credentials
+   - Các endpoint: /authorize, /token, /introspect
+   - Format của token: Access Token, Refresh Token
+
+❌ OAuth2 KHÔNG định nghĩa:
+   - Token phải có format gì (có thể JWT, opaque token...)
+   - Lưu trữ token như thế nào (database, Redis, in-memory...)
+   - UI của trang login
+```
+
+#### 🔄 Ví dụ:
+
+```
+Giống như HTTP là protocol:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HTTP định nghĩa:
+- GET, POST, PUT, DELETE methods
+- Status codes: 200, 404, 500...
+- Headers: Content-Type, Authorization...
+
+Nhưng KHÔNG định nghĩa:
+- Server phải viết bằng ngôn ngữ gì (Java, Python, Node.js...)
+- Database dùng gì (MySQL, PostgreSQL, MongoDB...)
+
+→ OAuth2 tương tự: Định nghĩa "luật chơi", không định nghĩa "cách chơi"
+```
+
+---
+
+### 3.2. Đặc tả chuẩn về ủy quyền truy cập
+
+_(Đặc tả ủy quyền truy cập theo OAuth2 – RFC 6749)_
+
+OAuth2 **không định nghĩa UI, không định nghĩa login form, không định nghĩa database**.  
+Nó chỉ định nghĩa **cách các bên tham gia phối hợp với nhau để ủy quyền truy cập một cách an toàn**.
+
+Trọng tâm của đặc tả là:
+
+> **ai sở hữu tài nguyên, ai xin quyền, ai cấp quyền, và ai bảo vệ tài nguyên**
+
+## 3.2.1. Bốn Vai Trò Chuẩn (Normative Roles)
+
+**[CONFIDENT]** Theo RFC 6749 - The OAuth 2.0 Authorization Framework, OAuth2 định nghĩa **4 vai trò (roles) chính**:[](https://curity.io/resources/learn/oauth-overview/)
+1. **Resource Owner** (Chủ sở hữu tài nguyên)
+2. **Client** (Ứng dụng khách)
+3. **Authorization Server** (Máy chủ xác thực)
+4. **Resource Server** (Máy chủ tài nguyên)
+
+Hãy tưởng tượng OAuth2 như một **hệ thống khóa và chìa khóa thông minh**:
+
+- **Resource Owner** = Chủ nhà
+- **Client** = Người muốn vào nhà
+- **Authorization Server** = Hệ thống kiểm tra và cấp chìa khóa điện tử
+- **Resource Server** = Cửa nhà với khóa thông minh
+
+### 1️⃣ Resource Owner (Chủ sở hữu tài nguyên)
+
+**[CONFIDENT]** Resource Owner là **thực thể có khả năng cấp quyền truy cập vào tài nguyên được bảo vệ**. Khi Resource Owner là một người, chúng ta gọi họ là **end-user** (người dùng cuối).
+
+`ROLE: Chủ quyền quyết định`
+
+- Thường là **end-user**
+
+- **Sở hữu dữ liệu/tài nguyên** cần được bảo vệ.
+
+- **Quyết định cấp phép** cho Client truy cập vào tài nguyên của mình
+
+- **Kiểm soát phạm vi truy cập** (scopes) - Client (ứng dụng bên thứ 3) được phép làm gì với dữ liệu
+
+
+📌 Trách nhiệm:
+
+- Xác thực danh tính của chính mình (thông qua Authorization Server)
+
+- Đồng ý hoặc từ chối yêu cầu truy cập
+
+
+📌 Lưu ý quan trọng:
+
+> Client **KHÔNG BAO GIỜ** được xác thực Resource Owner trực tiếp.
+
+## Ví dụ thực tế
+
+**Ví dụ 1: Ứng dụng Fitness**
+
+```
+Người dùng: Helen (Resource Owner)
+Tài nguyên: Dữ liệu sức khỏe (cân nặng, nhịp tim, bước chân)
+Ứng dụng: MyFitnessApp (Client)
+
+Helen muốn ứng dụng MyFitnessApp phân tích dữ liệu sức khỏe của cô.
+→ Helen là Resource Owner vì dữ liệu thuộc về cô
+→ Helen quyết định cấp quyền "đọc dữ liệu sức khỏe" cho MyFitnessApp
+```
+
+**Ví dụ 2: Đăng nhập Google**
+
+```text
+Bạn (Resource Owner) có tài khoản Google với:
+- Email: user@gmail.com
+- Danh bạ liên hệ
+- Google Drive files
+
+Khi ứng dụng Zoom yêu cầu "Đăng nhập bằng Google":
+→ Bạn là Resource Owner
+→ Bạn quyết định Zoom có được truy cập thông tin cơ bản không
+```
+
+---
+
+### 2️⃣ Client (Ứng dụng khách)
+
+**[CONFIDENT]** Client là **ứng dụng thực hiện yêu cầu truy cập tài nguyên được bảo vệ thay mặt cho Resource Owner và với sự ủy quyền của họ**.
+
+`ROLE: Bên xin quyền`
+
+- Là ứng dụng **muốn truy cập tài nguyên**
+
+- Không sở hữu dữ liệu
+
+- Chỉ được phép hành động **trong phạm vi được cấp**
+
+
+📌 Trách nhiệm:
+
+- Khai báo rõ **mục đích truy cập (scope)**
+
+- Điều hướng user đến Authorization Server
+
+- Sử dụng Access Token đúng phạm vi
+
+
+📌 Phân loại Client (rất quan trọng, đặc tả có nói):
+
+- **Confidential Client**: backend server, giữ được client_secret
+
+- **Public Client**: mobile, SPA, **không giữ được secret**
+
+
+📌 Đặc điểm quan trọng, theo tài liệu Spring Security, Client cần:​
+
+- **Client ID**: Định danh duy nhất của ứng dụng
+
+- **Client Secret**: Mật khẩu của ứng dụng (giống password của user)
+
+- **Grant Types**: Các luồng OAuth2 được phép sử dụng
+
+- **Redirect URI**: URL mà Authorization Server sẽ chuyển hướng sau khi xác thực
+
+#### Ví dụ với Spring Security
+
+**[CONFIDENT]** – Spring Authorization Server (khuyến nghị chính thức)
+
+> ⚠️ Lưu ý:  
+> Cấu hình dưới đây áp dụng cho **Spring Authorization Server** (thay thế hoàn toàn `spring-security-oauth2` đã deprecated).
+
+#### 📌 Đăng ký Client trong Authorization Server
+
+Trong Spring Security hiện nay, Client được đăng ký thông qua `RegisteredClient`:
+
+```java
+@Bean
+public RegisteredClientRepository registeredClientRepository(
+        PasswordEncoder passwordEncoder) {
+
+    RegisteredClient fitnessApp = RegisteredClient
+        .withId(UUID.randomUUID().toString())
+        .clientId("fitness-app") // Client ID
+        .clientSecret(passwordEncoder.encode("secret123")) // Client Secret (đã mã hóa)
+        .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+        .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+        .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+        .redirectUri("https://localhost:9090/callback")
+        .scope("read")
+        .scope("write")
+        .requireAuthorizationConsent(true) // Bắt buộc hiện màn hình xin quyền
+        .build();
+
+    return new InMemoryRegisteredClientRepository(fitnessApp);
+}
+```
+
+### 🧠 Giải thích từng phần (theo đúng bản chất OAuth2)
+
+#### 🔹 `clientId("fitness-app")`
+
+- **Định danh duy nhất** của Client App trong Authorization Server
+
+- Được gửi kèm trong request `/authorize` và `/token`
+
+👉 Tương đương “username” của ứng dụng (KHÔNG phải user)
+
+#### 🔹 `clientSecret(...)`
+
+- **Mật khẩu của Client**
+
+- Dùng khi Client đổi Authorization Code lấy Access Token
+
+- **BẮT BUỘC phải mã hóa** (BCrypt, Argon2…) trong môi trường thực tế
+
+👉 Chỉ dùng cho **confidential client** (backend, server app)
+
+#### 🔹 `clientAuthenticationMethod(CLIENT_SECRET_BASIC)`
+
+- Cách Client xác thực với Authorization Server
+
+- `CLIENT_SECRET_BASIC` = gửi client_id + secret qua HTTP Basic Auth
+
+👉 Phổ biến nhất cho backend applications
+
+#### 🔹 `authorizationGrantType(AUTHORIZATION_CODE)`
+
+- Cho phép Client sử dụng **Authorization Code Flow**
+
+- Đây là **luồng OAuth2 an toàn nhất** cho web/backend
+
+#### 🔹 `authorizationGrantType(REFRESH_TOKEN)`
+
+- Cho phép Client nhận **Refresh Token**
+
+- Dùng để lấy Access Token mới mà **không cần user đăng nhập lại**
+
+#### 🔹 `redirectUri("https://localhost:9090/callback")`
+
+- URL mà Authorization Server sẽ redirect user về sau khi cấp quyền
+
+- **Phải khớp tuyệt đối** với redirect URI trong request `/authorize`
+
+- **BẮT BUỘC HTTPS** (trừ môi trường dev)
+
+#### 🔹 `scope("read")`, `scope("write")`
+
+- Định nghĩa **phạm vi quyền** mà Client được phép yêu cầu
+
+- Scope sẽ được gắn vào Access Token
+
+👉 Resource Server sẽ dựa vào scope để **cho phép hoặc từ chối API**
+
+#### 🔹 `requireAuthorizationConsent(true)`
+
+- Bắt buộc hiển thị **Màn hình xin quyền (Consent Screen)**
+
+- User phải **chủ động đồng ý** trước khi token được cấp
+
+👉 Rất quan trọng cho bảo mật & tuân thủ OAuth2
+
+---
+
+### 3️⃣ Authorization Server (Máy chủ ủy quyền)
+
+**[CONFIDENT]** Authorization Server là **máy chủ cấp phát access token cho Client sau khi xác thực thành công Resource Owner và nhận được sự ủy quyền**
+
+`ROLE: Trọng tài tin cậy`
+
+Authorization Server là **trung tâm quyền lực** của OAuth2. (ví dụ Google Accounts, Github, Facebook, KeyCloak).
+
+📌 Nhiệm vụ:
+
+1. **Xác thực Resource Owner** (authenticate user) - username/password, biometric, MFA, etc.
+
+2. **Xác thực Client** (authenticate client) - kiểm tra Client ID và Client Secret
+
+3. **Hiển thị màn hình consent** (obtain authorization) - cho phép user chọn scopes
+
+4. **Cấp phát Access Token** (issue token) - JWT hoặc opaque token (UUID)
+
+5. **Cấp phát Refresh Token** (issue refresh token) - để lấy access token mới khi hết hạn
+
+6. **Quản lý token lifecycle** (manage tokens) - kiểm tra hết hạn, thu hồi token
+
+
+📌 Điều cực kỳ quan trọng:
+
+> Resource Server **TIN Authorization Server**,  
+> chứ **KHÔNG tin Client**.
+
+**[CONFIDENT]** Theo Spring Security in Action Chapter 13:
+
+```
+┌──────────────────────────────────────────────────┐
+│    AUTHORIZATION SERVER ENDPOINTS                │
+├──────────────────────────────────────────────────┤
+│                                                  │
+│  /oauth/authorize                                │
+│  → Authorization endpoint                        │
+│  → User xác thực và cấp quyền tại đây            │
+│  → Dùng cho authorization_code grant             │
+│                                                  │
+│  /oauth/token                                    │
+│  → Token endpoint                                │
+│  → Client lấy access token tại đây               │
+│  → Dùng cho tất cả grant types                   │
+│                                                  │
+│  /oauth/check_token                              │
+│  → Token introspection endpoint                  │
+│  → Resource Server validate token tại đây        │
+│  → Kiểm tra token có hợp lệ không                │
+│                                                  │
+└──────────────────────────────────────────────────┘
+```
+
+---
+
+### 4️⃣ Resource Server (Máy chủ tài nguyên)
+
+Resource Server là **máy chủ lưu trữ các tài nguyên được bảo vệ, có khả năng chấp nhận và phản hồi các yêu cầu truy cập tài nguyên bằng cách sử dụng access tokens**.
+
+
+
+`ROLE: Người gác cổng`
+
+- Lưu trữ dữ liệu thật của user
+
+- **KHÔNG biết username/password**
+
+- **KHÔNG quan tâm user login thế nào**
+
+
+📌 Chỉ làm 3 việc:
+
+1. Nhận request kèm Access Token
+
+2. Xác minh token (chữ ký, expiry, scope, audience)
+
+3. Cho phép hoặc từ chối truy cập
+
+
+#### 🎯 Ví dụ 1: Google (rõ ràng nhất)
+
+##### Khi dùng Google OAuth
+
+|Thành phần|Là ai|
+|---|---|
+|Authorization Server|`accounts.google.com`|
+|Resource Server|`photos.googleapis.com`|
+|Client|App in ảnh|
+|Resource Owner|User|
+
+Flow:
+
+1. User login tại **Google Accounts**  
+   → **Authorization Server**
+
+2. Google cấp **Access Token**
+
+3. App gọi:
+
+   `GET https://photos.googleapis.com/v1/mediaItems Authorization: Bearer ya29.a0AfH6...`
+
+4. **Google Photos API** làm gì?
+
+    - ❌ Không hỏi username/password
+
+    - ❌ Không biết user login bằng OTP hay mật khẩu
+
+    - ✅ Chỉ verify token
+
+
+👉 **Google Photos API = Resource Server**
+
+---
+
+#### 🎯 Ví dụ 2: GitHub
+
+#### “Login bằng GitHub”
+
+|Thành phần|Là ai|
+|---|---|
+|Authorization Server|GitHub OAuth|
+|Resource Server|GitHub REST API|
+|Client|App của mày|
+
+Request thực tế:
+
+`GET https://api.github.com/user Authorization: Bearer ghp_xxxxxx`
+
+GitHub API:
+
+- Kiểm tra token có do **GitHub phát** không
+
+- Token có scope `read:user` không
+
+- Token hết hạn chưa
+
+
+👉 OK → trả profile  
+👉 FAIL → 401 / 403
+
+---
+
+## 3.2.2. Mối Quan Hệ Tin Cậy (Trust Relationships)
+
+OAuth2 **không phải mọi bên đều tin nhau**:
+
+```pgsql
+Resource Server  →  Tin Authorization Server
+Authorization Server → Tin Resource Owner (sau khi xác thực)
+Client           → KHÔNG được tin
+```
+
+📌 Client **luôn bị coi là không đáng tin**.
+
+Đó là lý do:
+
+- Client không giữ password user
+
+- Client không được tự tạo token
+
+- Client chỉ dùng token do Authorization Server cấp
+
+---
+## 3.2.3. Authorization Code Flow
+#### 🔄 Flow cơ bản:
+
+![Pasted image 20260206163540.png](../../../Obsidian/Java/OAuth2/1.%20Architecture%20%26%20Components/Pasted%20image%2020260206163540.png)
+
+### 🔹 Step 1: User truy cập ứng dụng
+
+`User -> Client: Truy cập ứng dụng`
+
+- Người dùng mở ứng dụng (website / web app / backend app).
+
+- Ở thời điểm này:
+
+    - User **chưa đăng nhập**
+
+    - Client **chưa có quyền** truy cập tài nguyên của user.
+
+
+👉 Client biết rằng:
+
+> “Muốn truy cập tài nguyên của user → phải xin phép qua OAuth2”.
+
+### 🔹 Step 2: Client redirect user sang Authorization Server để xin quyền
+
+`Client -> User: HTTP 302 Redirect /authorize User -> Auth: GET /authorize`
+
+- Client **KHÔNG xử lý login**.
+
+- Client **redirect trình duyệt của user** sang Authorization Server (Google, GitHub, Keycloak…).
+
+
+Request `/authorize` thường chứa:
+
+- `client_id` – app nào đang xin quyền
+
+- `scope` – xin làm những gì (ví dụ: read:email, read:photos)
+
+- `redirect_uri` – sau khi xong thì quay về đâu
+
+
+👉 Quan trọng:
+
+> User **luôn login trực tiếp với Authorization Server**,  
+> Client **không thấy, không chạm** vào password.
+
+### 🔹 Step 3: User đăng nhập và xác nhận cấp quyền (Consent)
+
+`Auth -> User: Login + Consent Screen User -> Auth: Đồng ý cấp quyền`
+
+Tại đây Authorization Server làm **2 việc quan trọng**:
+
+1. **Xác thực user**
+
+    - User nhập username/password
+
+    - Hoặc MFA, OTP, sinh trắc học…
+
+2. **Hiển thị Màn hình xin quyền (Consent Screen)**  
+   Ví dụ:
+
+   > “Ứng dụng ABC muốn:
+   >
+   > - Xem email của bạn
+   >
+   > - Đọc ảnh của bạn”
+>
+
+User có quyền:
+
+- ✅ Đồng ý
+
+- ❌ Từ chối
+
+
+👉 OAuth2 **đặt quyền quyết định tuyệt đối trong tay User**.
+
+### 🔹 Step 4: Authorization Server trả Authorization Code cho Client
+
+`Auth -> User: Redirect về Client ?code=AUTH_CODE User -> Client: GET /callback?code=AUTH_CODE`
+
+- Sau khi user đồng ý:
+
+    - Authorization Server **KHÔNG trả token ngay**
+
+    - Chỉ trả về **Authorization Code** (ngắn hạn, dùng 1 lần)
+
+
+👉 Authorization Code:
+
+- Không dùng để gọi API
+
+- Chỉ dùng để **đổi lấy Access Token**
+
+- Giảm rủi ro bị đánh cắp token qua trình duyệt
+
+### 🔹 Step 5: Client đổi Authorization Code lấy Access Token (server-to-server)
+
+`Client -> Auth: POST /token Auth -> Client: Access Token (+ Refresh Token)`
+
+- Đây là bước **quan trọng nhất về bảo mật**.
+
+- Client gửi:
+
+    - Authorization Code
+
+    - `client_secret`
+
+
+⚠️ Request này:
+
+- Diễn ra **giữa server với server**
+
+- **KHÔNG qua trình duyệt**
+
+- User **không thấy token**
+
+
+Authorization Server kiểm tra:
+
+- Code có hợp lệ không?
+
+- Client có đúng không?
+
+- Code đã dùng chưa?
+
+
+👉 Nếu hợp lệ → cấp:
+
+- **Access Token** (dùng gọi API)
+
+- **Refresh Token** (nếu có)
+
+### 🔹 Step 6: Client gọi Resource Server bằng Access Token
+
+`Client -> Resource: Authorization: Bearer TOKEN Resource -> Client: Protected Resource`
+
+- Client gửi request API kèm Access Token.
+
+- Resource Server:
+
+    - Không login user
+
+    - Không biết password
+
+    - Chỉ làm 1 việc: **xác minh token**
+
+
+Resource Server kiểm tra:
+
+- Token có hợp lệ không?
+
+- Token có hết hạn không?
+
+- Token có đúng scope không?
+
+
+👉 Nếu OK → trả dữ liệu  
+👉 Nếu sai → `401 Unauthorized` hoặc `403 Forbidden`
+
+## 🔐 Tổng kết bản chất flow
+
+|Thành phần|Trách nhiệm|
+|---|---|
+|**User**|Đăng nhập & quyết định cấp quyền|
+|**Client App**|Xin quyền & dùng token|
+|**Authorization Server**|Xác thực user & cấp token|
+|**Resource Server**|Bảo vệ dữ liệu|
+
+---
+
+### 3.3. Token-Based Access Control
+
+**Cơ chế kiểm soát truy cập dựa trên token** thay vì session.
+
+#### 📊 So sánh:
+
+| Session-based | Token-based (OAuth2) |
+|---------------|----------------------|
+| Server lưu trữ session | Server không lưu state (stateless) |
+| Cookie gửi session ID | Header gửi Access Token |
+| Khó scale horizontal | Dễ scale (microservices) |
+| Chỉ dùng trong 1 domain | Dùng cross-domain |
+
+#### 💻 Code minh họa:
+
+```java
+// ❌ Session-based (traditional)
+@GetMapping("/profile")
+public UserProfile getProfile(HttpSession session) {
+    String userId = (String) session.getAttribute("userId"); // Lấy từ session
+    if (userId == null) {
+        throw new UnauthorizedException();
+    }
+    return userService.getProfile(userId);
+}
+
+// ✅ Token-based (OAuth2)
+@GetMapping("/profile")
+public UserProfile getProfile(@RequestHeader("Authorization") String authHeader) {
+    String token = authHeader.replace("Bearer ", "");
+
+    // Validate token (không cần session!)
+    if (!tokenValidator.isValid(token)) {
+        throw new UnauthorizedException();
+    }
+
+    String userId = tokenValidator.getUserId(token);
+    return userService.getProfile(userId);
+}
+
+// ✅ Spring Security tự động làm phần validate
+@GetMapping("/profile")
+@PreAuthorize("isAuthenticated()")
+public UserProfile getProfile(Authentication authentication) {
+    String userId = authentication.getName(); // Lấy từ token
+    return userService.getProfile(userId);
+}
+```
+
+#### 🎫 Access Token structure (JWT example):
+
+```json
+// Header
+{
+  "alg": "RS256",  // Thuật toán mã hóa
+  "typ": "JWT"     // Loại token
+}
+
+// Payload
+{
+  "sub": "user123",              // Subject (user ID)
+  "scope": "read:photos write:posts",  // ✅ Phạm vi quyền
+  "iss": "https://auth.example.com",   // Issuer (ai cấp token)
+  "exp": 1704067200,             // Expiration (hết hạn lúc nào)
+  "iat": 1704063600,             // Issued at (cấp lúc nào)
+  "client_id": "photo-app"       // Client nào nhận token
+}
+
+// Signature (chữ ký xác thực)
+RSASHA256(
+  base64UrlEncode(header) + "." + base64UrlEncode(payload),
+  privateKey
+)
+```
+
+---
+## 📚 Tài Liệu Tham Khảo
+
+1. **OAuth 2.0 Official Specification (RFC 6749)** - https://oauth.net/2/
+2. **Spring Security in Action** by Laurentiu Spilca
+3. **Spring Security Reference Documentation** - https://docs.spring.io/spring-security/reference/
+4. **OAuth 2.0 Security Best Practices** - https://oauth.net/2/oauth-best-practice/
+
+---
+
+## 🎯 Tóm Tắt
+
+| Khái niệm | Mô tả ngắn gọn |
+|-----------|----------------|
+| **OAuth2 giải quyết** | Tránh chia sẻ password, ủy quyền có giới hạn, thu hồi được |
+| **OAuth2 KHÔNG phải** | Authentication protocol, API security hoàn chỉnh, thay thế HTTPS |
+| **OAuth2 LÀ** | Authorization framework, Token-based access control |
+| **4 vai trò** | Resource Owner, Client, Authorization Server, Resource Server |
+| **Scope** | Giới hạn quyền truy cập cụ thể |
+| **Token** | "Giấy ủy quyền" thay thế password |
+
+---
+
+## 🚀 Bước Tiếp Theo
+
+Sau khi đã hiểu rõ **OAuth2 Framework Overview**, bước tiếp theo bạn nên học:
+
+1. **OAuth2 Grant Types** - 4 loại flow chính (Authorization Code, Implicit, Password, Client Credentials)
+2. **Implement Authorization Server** với Spring Security
+3. **Implement Resource Server** với Spring Security
+4. **JWT Token** - Cấu trúc và validation
+5. **OAuth2 Security Best Practices**
+
+---
+
+**© 2026 - OAuth2 Learning Journey with Spring Security**  
+**Prepared by: Senior Software Engineer (25+ years OAuth2 experience)**

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="vi">
+<head><meta charset="UTF-8"><title>Sự kiện</title></head>
+<body>
+<h1>🗓️ Sự kiện sắp tới</h1>
+<p>Lịch: <b th:text="${calendarId}"></b></p>
+
+<p th:if="${events == null or events.isEmpty()}">Không có sự kiện sắp tới.</p>
+
+<ul>
+    <li th:each="e : ${events}">
+        <b th:text="${e.summary}">Tiêu đề</b>
+        — bắt đầu: <span th:text="${e.start != null ? e.start.display() : '?'}">time</span>
+    </li>
+</ul>
+<a href="/calendars">← Về danh sách lịch</a>
+</body>
+</html>

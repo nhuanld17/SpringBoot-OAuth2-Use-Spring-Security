@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="vi">
+<head><meta charset="UTF-8"><title>Danh sách lịch</title></head>
+<body>
+<h1>📅 Các lịch của bạn</h1>
+<ul>
+    <li th:each="c : ${calendars}">
+        <a th:href="@{/events(calendarId=${c.id})}" th:text="${c.summary}">Tên lịch</a>
+        <span th:if="${c.primary}"> (lịch chính)</span>
+    </li>
+</ul>
+<a href="/">← Về trang chủ</a>
+</body>
+</html>
