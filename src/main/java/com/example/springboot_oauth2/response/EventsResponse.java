@@ -15,7 +15,7 @@ public record EventsResponse (
             String dateTime,
             String date
     ) {
-        // Hàm tiện tích, lấy giá trị nào không rỗng
+        // Hàm tiện ích, lấy giá trị nào không rỗng
         public String display(){
             return dateTime != null ? dateTime : date;
         }

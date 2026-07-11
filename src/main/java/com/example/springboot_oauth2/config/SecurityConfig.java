@@ -15,17 +15,17 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequest
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * PHASE 2: Giao toàn bộ luồng OAuth2 (authorized, callback, PKCE, refresh, lưu token)
+ * PHASE 2: Giao toàn bộ luồng OAuth2 (authorize, callback, PKCE, refresh, lưu token)
  * cho Spring Security OAuth2 Client.
  *
  * Ta dùng oauth2Client() THUẦN (không dùng oauth2Login()) vì đây là
- * DELEGATED AUTHORIZATION - app được uỷ quyền gọi Google Calendar API thay cho người dùng,
- * KHÔNG phải đăng nhập/OIDC. Vi vậy không có principal/login; authorized client được lưu theo
+ * DELEGATED AUTHORIZATION - app được ủy quyền gọi Google Calendar API thay cho người dùng,
+ * KHÔNG phải đăng nhập/OIDC. Vì vậy không có principal/login; authorized client được lưu
  * theo HttpSession.
  *
- * Việc xin ủy quyền sẽ TỰ ĐỘNG kích hoạt khi controller cần accesstoken
- * (qua @RegisteredOAuth2AuthorizationClient) - Spring ném ClientAuthorizationRequiredException
- * -> redirect sang Google -> callback -> quay lại request gốc
+ * Việc xin ủy quyền sẽ TỰ ĐỘNG kích hoạt khi controller cần access token
+ * (qua @RegisteredOAuth2AuthorizedClient) - Spring ném ClientAuthorizationRequiredException
+ * -> redirect sang Google -> callback -> quay lại request gốc.
  */
 @Configuration
 public class SecurityConfig {
@@ -35,7 +35,7 @@ public class SecurityConfig {
             HttpSecurity http,
             ClientRegistrationRepository clientRegistrationRepository) throws Exception {
         http
-                // Không bắt login: mỗi request đề được phép; ủy quyền chỉ kích hoạt khi cần token
+                // Không bắt login: mọi request đều được phép; ủy quyền chỉ kích hoạt khi cần token
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .oauth2Client(oauth2 -> oauth2
                         .authorizationCodeGrant(codeGrant -> codeGrant
@@ -53,13 +53,16 @@ public class SecurityConfig {
      */
     private OAuth2AuthorizationRequestResolver pkceAuthorizationRequestResolver(
             ClientRegistrationRepository repo) {
+        // resolver này lắng nghe ở base URI /oauth2/authorization.
+        // Tức là URL khởi động flow sẽ là /oauth2/authorization/google (google là registrationId).
         DefaultOAuth2AuthorizationRequestResolver resolver =
                 new DefaultOAuth2AuthorizationRequestResolver(repo, "/oauth2/authorization");
 
         resolver.setAuthorizationRequestCustomizer(builder -> {
+            // Bật PKCE, Spring tự động tạo code_challenge, code_challenge_method=S256, code_verifer
             OAuth2AuthorizationRequestCustomizers.withPkce().accept(builder);
             builder.additionalParameters(params -> {
-                params.put("access_type", "offline");
+                params.put("access_type", "offline"); // offline: xin thêm refresh token
                 params.put("prompt", "consent");
             });
         });
@@ -67,6 +70,11 @@ public class SecurityConfig {
     }
 
     /**
+     * OAuth2AuthorizedClientManager là thành phần điều phối trung tâm cho việc "lấy được một
+     * authorized client". Nó chịu trách nhiệm quyết định: khi controller cần token thì nên cấp
+     * mới (qua Authorization Code), refresh token cũ, hay trả về token đang có — bằng cách ủy
+     * quyền cho các OAuth2AuthorizedClientProvider.
+     *
      * Manager với provider authorizationCode + refreshToken.
      * Nhờ refreshToken() mà khi access token hết hạn, lần kế @RegisteredOAuth2AuthorizedClient
      * sẽ TỰ ĐỘNG dùng refresh_token đổi access token mới (trong suốt, không bắt consent lại).

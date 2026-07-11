@@ -37,8 +37,12 @@ public class CalendarController {
             CalendarListResponse calendars = calendarService.listCalendars(accessToken);
             model.addAttribute("calendars", calendars.items());
         } catch (RestClientResponseException ex) {
-            model.addAttribute("error", "Google Calendar API tra ve loi "
-                    + ex.getStatusCode().value() + " khi lay danh sach lich.");
+            // In nguyên body lỗi của Google ra console để biết chính xác lý do (vd: API chưa Enable)
+            System.err.println(">>> Calendar API lỗi " + ex.getStatusCode().value()
+                    + " khi lấy danh sách lịch:\n" + ex.getResponseBodyAsString());
+            model.addAttribute("error", "Google Calendar API trả về lỗi "
+                    + ex.getStatusCode().value() + " khi lấy danh sách lịch:\n"
+                    + ex.getResponseBodyAsString());
             return "error-page";
         }
 
@@ -59,9 +63,12 @@ public class CalendarController {
         try {
             events = calendarService.listUpcomingEvents(accessToken, calendarId, now);
         } catch (RestClientResponseException ex) {
-            model.addAttribute("error", "Google Calendar API tra ve loi "
+            System.err.println(">>> Calendar API lỗi " + ex.getStatusCode().value()
+                    + " khi lấy sự kiện của lịch " + calendarId + ":\n" + ex.getResponseBodyAsString());
+            model.addAttribute("error", "Google Calendar API trả về lỗi "
                     + ex.getStatusCode().value()
-                    + " khi lay su kien cua lich: " + calendarId);
+                    + " khi lấy sự kiện của lịch: " + calendarId + "\n"
+                    + ex.getResponseBodyAsString());
             return "error-page";
         }
 

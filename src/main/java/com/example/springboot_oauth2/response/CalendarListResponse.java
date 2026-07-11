@@ -7,8 +7,8 @@ public record CalendarListResponse (
 ){
     public record CalendarItem (
             String id,
-            String summary, // tên lịch
-            boolean primary // Có phải lịch chính không ??
+            String summary, // Tên lịch
+            boolean primary // Có phải lịch chính không?
     ){
 
     }
